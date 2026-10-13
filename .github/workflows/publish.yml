@@ -1,0 +1,32 @@
+# Publishes to npm when a GitHub release is published (tag v<version>, matching package.json).
+# Needs the repository secret NPM_TOKEN (an npm "Automation" or granular token with publish rights).
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write # npm provenance: shows on npm that the package was built here
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Check the tag matches package.json
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then echo "Release tag ${GITHUB_REF_NAME} does not match package.json version v${VERSION}"; exit 1; fi
+      - run: npm install --no-audit --no-fund
+      - run: npm install --no-save --no-audit --no-fund matterbridge@3.10.13
+      - run: npm run build
+      - run: npm pack --dry-run
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

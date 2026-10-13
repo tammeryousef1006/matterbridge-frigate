@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Frigate Cameras</title>
+<style>
+  /* Plugin page: served by Matterbridge at /plugins/<plugin>/ and calling /plugins/<plugin>/api/:path (platform.onFetch).
+     It mirrors the plugin settings: tests and previews never change the config; only Save does, for that one camera. */
+  :root {
+    --bg: #f2f5f9; --surface: #ffffff; --soft: #f6f8fb; --fg: #17212c; --muted: #5d6a78; --line: #dfe5ec;
+    --accent: #2f63d8; --accent-soft: #e8eefc; --accent-fg: #ffffff;
+    --ok: #18794e; --ok-soft: #e3f4ea; --wait: #a05a00; --wait-soft: #fff1dc; --bad: #b42318; --bad-soft: #fde9e7;
+    --font-ui: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", sans-serif;
+    --font-mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e131a; --surface: #161d26; --soft: #1b232e; --fg: #e6ebf1; --muted: #97a4b3; --line: #2a3441;
+    --accent: #7199ff; --accent-soft: #1c2a47; --accent-fg: #0b1220; --ok: #55c58f; --ok-soft: #13301f;
+    --wait: #f2a74e; --wait-soft: #2e2312; --bad: #ff8a7d; --bad-soft: #3a1a17; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; overflow-x: hidden; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 15px; line-height: 1.45; }
+  header { display: flex; align-items: center; gap: 14px; padding: 18px 24px; border-bottom: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
+  header .logo { width: 40px; height: 40px; border-radius: 10px; background: var(--accent); color: var(--accent-fg); display: grid; place-items: center; flex: none; }
+  header h1 { font-size: 21px; margin: 0; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header .grow { flex: 1; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--soft); color: var(--muted); border: 1px solid var(--line); white-space: nowrap; }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+  .pill.wait { background: var(--wait-soft); color: var(--wait); border-color: transparent; }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+  .pill.acc { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+  main { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; padding: 20px 24px 120px; max-width: 1280px; margin: 0 auto; }
+  @media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); padding: 16px 16px 120px; } header { padding: 14px 16px; } }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; }
+  .card h2 { font-size: 15px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .card h2 .grow { flex: 1; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  button { font: inherit; font-size: 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 7px 13px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .55; cursor: default; }
+  button.link { border: none; background: none; color: var(--accent); padding: 4px 6px; }
+  .list { display: flex; flex-direction: column; gap: 8px; }
+  .cam { text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; width: 100%; }
+  .cam.sel { border-color: var(--accent); background: var(--accent-soft); }
+  .cam .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .cam b { font-size: 14px; }
+  .found { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .found:first-child { border-top: none; }
+  .found .grow { flex: 1; min-width: 0; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+  @media (max-width: 600px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+  label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
+  label.f .hint { font-weight: 400; color: var(--muted); font-size: 12px; }
+  input[type=text], input[type=password], input[type=number], select { font: inherit; font-size: 14px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); color: var(--fg); width: 100%; min-width: 0; }
+  input:focus, select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .pw { display: flex; gap: 6px; }
+  .pw input { flex: 1; }
+  .pw button { padding: 6px 9px; flex: none; }
+  .wide { grid-column: 1 / -1; }
+  .hintbox { background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+  .hintbox ul { margin: 6px 0 0; padding-left: 18px; }
+  .hintbox code, code { font-family: var(--font-mono); font-size: 12px; word-break: break-all; }
+  .toggles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; }
+  @media (max-width: 600px) { .toggles { grid-template-columns: minmax(0, 1fr); } }
+  .tg { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; cursor: pointer; }
+  .tg input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); flex: none; }
+  .tg small { display: block; color: var(--muted); font-size: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: none; border-radius: 0; padding: 6px 12px; background: var(--soft); }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+  .results { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; font-size: 14px; align-items: baseline; }
+  .results dt { color: var(--muted); font-size: 13px; }
+  .results dd { margin: 0; }
+  .viewer { background: #0b0f14; border-radius: 10px; aspect-ratio: 16 / 9; display: grid; place-items: center; overflow: hidden; position: relative; }
+  .viewer img { max-width: 100%; max-height: 100%; display: block; }
+  .viewer .msg { color: #c9d3de; font-size: 14px; text-align: center; padding: 16px; }
+  .viewer .badge { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,.6); color: #fff; border-radius: 6px; padding: 2px 8px; font-size: 12px; }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  .controls .grow { flex: 1; }
+  .motion { display: flex; align-items: center; gap: 10px; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--line); flex: none; transition: background .2s; }
+  .dot.on { background: var(--bad); box-shadow: 0 0 0 4px var(--bad-soft); }
+  .events { font-family: var(--font-mono); font-size: 12px; color: var(--muted); max-height: 120px; overflow: auto; margin-top: 8px; }
+  .qr { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+  .qr .code { width: 170px; height: 170px; background: #fff; border-radius: 8px; padding: 4px; flex: none; }
+  .qr .code svg { width: 100%; height: 100%; display: block; }
+  .manual { font-family: var(--font-mono); font-size: 20px; letter-spacing: 1px; }
+  .savebar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); padding: 12px 24px; display: flex; gap: 10px; align-items: center; justify-content: flex-end; flex-wrap: wrap; z-index: 5; }
+  .savebar .grow { flex: 1; min-width: 160px; font-size: 14px; }
+  .note { padding: 10px 12px; border-radius: 10px; font-size: 13px; margin-top: 10px; }
+  .note.ok { background: var(--ok-soft); color: var(--ok); }
+  .note.bad { background: var(--bad-soft); color: var(--bad); }
+  .note.wait { background: var(--wait-soft); color: var(--wait); }
+  .hidden { display: none !important; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  pre.log { font-family: var(--font-mono); font-size: 12px; white-space: pre-wrap; word-break: break-all; background: var(--soft); padding: 8px 10px; border-radius: 8px; max-height: 220px; overflow: auto; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 10px; }
+  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<style>
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 13px; background: var(--soft); cursor: pointer; }
+  .chip input { accent-color: var(--accent); margin: 0; }
+  .streams { display: flex; flex-direction: column; gap: 6px; }
+  .stream { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+  .stream code { font-size: 13px; }
+  .dot.small { width: 10px; height: 10px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  details.more { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+  details.more > summary { font-weight: 600; color: var(--fg); font-size: 14px; }
+</style>
+<header>
+  <div class="logo" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
+  <div>
+    <h1>Frigate cameras</h1>
+    <div class="sub">Connect Frigate, check each camera, and pair it. Nothing changes in the plugin until you press <b>Save</b>.</div>
+  </div>
+  <div class="grow"></div>
+  <span class="pill" id="frigatePill"></span>
+  <span class="pill" id="version"></span>
+  <button class="link" id="theme" title="Light / dark">Theme</button>
+</header>
+
+<main>
+  <aside>
+    <div class="card">
+      <h2>Frigate <span class="grow"></span><button class="link" id="connToggle">Edit</button></h2>
+      <div id="connSummary" class="small"></div>
+      <div id="connForm" class="hidden" style="margin-top:12px">
+        <div class="grid2">
+          <label class="f wide">Address <span class="hint">IP or host name, no http://</span><input type="text" id="c_frigateHost" placeholder="192.168.1.20" autocomplete="off"></label>
+          <label class="f">Port <span class="hint">5000, or 8971 (login)</span><input type="number" id="c_frigatePort" min="1" max="65535"></label>
+          <div></div>
+          <label class="f">Frigate user <span class="hint">port 8971: any Frigate user</span><input type="text" id="c_frigateUser" autocomplete="off"></label>
+          <label class="f">Frigate password<div class="pw"><input type="password" id="c_frigatePassword" autocomplete="new-password"><button type="button" data-eye="c_frigatePassword" title="Show / hide">👁</button></div></label>
+        </div>
+        <details class="more"><summary>Restream (go2rtc)</summary>
+          <div class="grid2" style="margin-top:8px">
+            <label class="f">RTSP port<input type="number" id="c_restreamPort" min="1" max="65535"></label>
+            <div></div>
+            <label class="f">RTSP user <span class="hint">only if go2rtc has one</span><input type="text" id="c_restreamUser" autocomplete="off"></label>
+            <label class="f">RTSP password<div class="pw"><input type="password" id="c_restreamPassword" autocomplete="new-password"><button type="button" data-eye="c_restreamPassword" title="Show / hide">👁</button></div></label>
+          </div>
+        </details>
+        <details class="more"><summary>MQTT (optional)</summary>
+          <div class="small muted" style="margin:6px 0">Empty broker: detections come from Frigate's own WebSocket, nothing else needed.</div>
+          <div class="small" id="mqttHint"></div>
+          <div class="grid2" style="margin-top:8px">
+            <label class="f">Broker<input type="text" id="c_mqttHost" placeholder="192.168.1.20" autocomplete="off"></label>
+            <label class="f">Port<input type="number" id="c_mqttPort" min="1" max="65535"></label>
+            <label class="f">User<input type="text" id="c_mqttUser" autocomplete="off"></label>
+            <label class="f">Password<div class="pw"><input type="password" id="c_mqttPassword" autocomplete="new-password"><button type="button" data-eye="c_mqttPassword" title="Show / hide">👁</button></div></label>
+            <label class="f">Topic prefix<input type="text" id="c_mqttTopicPrefix" autocomplete="off"></label>
+            <label class="tg" style="align-self:end"><input type="checkbox" id="c_mqttTls"><span>TLS</span></label>
+          </div>
+        </details>
+        <div class="controls">
+          <button id="findBtn">Search network</button>
+          <button class="primary" id="connTestBtn">Test</button>
+          <button id="connSaveBtn">Save</button>
+        </div>
+        <div id="foundList"></div>
+        <div id="connResult"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Cameras</h2>
+      <div class="list" id="cameraList"></div>
+    </div>
+  </aside>
+
+  <section id="editor">
+    <div class="card empty" id="emptyState">Choose a camera on the left.</div>
+
+    <div id="editorBody" class="hidden">
+      <div class="card">
+        <h2><span id="edTitle">Camera</span> <span class="grow"></span><span id="edStatus"></span></h2>
+        <div class="row" style="justify-content:space-between">
+          <label class="tg"><input type="checkbox" id="f_enabled"><span>Add to Matter<small>Its own Matter device with its own QR code</small></span></label>
+          <label class="f" style="min-width:220px">Name in Matter<input type="text" id="f_title" autocomplete="off"></label>
+        </div>
+        <div class="small muted" id="edNote" style="margin-top:8px"></div>
+      </div>
+
+      <div class="card">
+        <h2>Streams <span class="grow"></span><button id="streamsBtn">Check again</button></h2>
+        <div class="streams" id="streams"></div>
+        <div class="small muted" style="margin-top:8px">go2rtc restreams of this camera in Frigate. Matter needs H.264; H.265 streams are not used. Live audio needs Opus or G.711 in the stream.</div>
+      </div>
+
+      <div class="card">
+        <h2>Preview <span class="grow"></span><span class="small muted" id="previewInfo"></span></h2>
+        <div class="viewer" id="viewer"><div class="msg">Press <b>Play 15 s</b> to see the stream with the settings below.</div></div>
+        <div class="controls">
+          <label class="f" style="min-width:200px">Stream<select id="f_stream"></select></label>
+          <label class="f" style="min-width:170px">Rotation<select id="f_rotation">
+            <option value="0">As is</option><option value="90">90° clockwise</option><option value="180">180° (upside down)</option><option value="270">90° counter-clockwise</option>
+          </select></label>
+          <span class="grow"></span>
+          <button class="primary" id="playBtn">Play 15 s</button>
+          <button class="hidden" id="stopBtn">Stop</button>
+          <button id="snapBtn" title="The picture the hub gets from Frigate">Frigate snapshot</button>
+        </div>
+        <div class="small muted" style="margin-top:8px">The preview is a picture with each keyframe, not smooth video; it uses the running stream when the camera is already in Matter.</div>
+        <div class="controls" style="border-top:1px solid var(--line); padding-top:12px">
+          <button id="listenBtn">Listen 5 s</button>
+          <audio id="player" controls class="hidden" style="height:34px; max-width:100%"></audio>
+          <span class="small muted" id="listenMsg"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Detections <span class="grow"></span><button id="watchBtn">Watch</button></h2>
+        <div class="motion"><span class="dot" id="motionDot"></span><span id="motionText">Motion in Matter</span></div>
+        <div class="events" id="events"></div>
+        <div class="toggles" style="margin-top:12px">
+          <label class="tg"><input type="checkbox" id="f_detections"><span>Detections<small>Frigate's objects are motion in Matter and start clips</small></span></label>
+          <label class="tg"><input type="checkbox" id="f_motion"><span>Frigate motion counts too<small>Pixel motion without an object: more clips, more false alarms</small></span></label>
+        </div>
+        <div style="margin-top:12px"><div class="small" style="font-weight:600; margin-bottom:6px">Objects that count <span class="muted" style="font-weight:400">(none ticked = all)</span></div><div class="chips" id="objects"></div></div>
+        <div style="margin-top:12px" id="zonesBox"><div class="small" style="font-weight:600; margin-bottom:6px">Only in these zones <span class="muted" style="font-weight:400">(none ticked = anywhere)</span></div><div class="chips" id="zones"></div></div>
+      </div>
+
+      <div class="card">
+        <h2>Settings</h2>
+        <div class="toggles">
+          <label class="tg"><input type="checkbox" id="f_liveAudio"><span>Live view audio<small>Opus from go2rtc as is, or made from G.711</small></span></label>
+          <label class="tg"><input type="checkbox" id="f_clipAudio"><span>Clip audio<small>AAC in recorded clips</small></span></label>
+          <label class="tg"><input type="checkbox" id="f_recording"><span>Recording<small>Clips saved by the hub (SmartThings cloud)</small></span></label>
+          <label class="tg"><input type="checkbox" id="f_keepConnected"><span>Keep the stream connected<small>Faster live view when recording is off</small></span></label>
+        </div>
+        <details class="more"><summary>RTSP URL instead of go2rtc</summary>
+          <label class="f" style="margin-top:8px">RTSP URL <span class="hint">Only for a camera without a go2rtc restream (H.264)</span><input type="text" id="f_rtspUrl" placeholder="rtsp://user:password@camera-ip:554/path" autocomplete="off"></label>
+        </details>
+      </div>
+
+      <div class="card">
+        <h2>Matter</h2>
+        <div id="matter"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="savebar hidden" id="savebar">
+  <span class="grow" id="saveText">Unsaved changes</span>
+  <button id="revertBtn">Undo changes</button>
+  <button class="primary" id="saveBtn">Save camera</button>
+</div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const el = (tag, props = {}, children = []) => {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') node.className = v;
+    else if (k === 'text') node.textContent = v;
+    else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+    else if (k === 'checked') node.checked = v;
+    else node.setAttribute(k, v);
+  }
+  for (const c of [].concat(children)) if (c !== null && c !== undefined) node.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  return node;
+};
+const spin = () => el('span', { class: 'spin' });
+
+let dark = matchMedia('(prefers-color-scheme: dark)').matches;
+try { const t = localStorage.getItem('frigate-setup-theme'); if (t) dark = t === 'dark'; } catch {}
+const applyTheme = () => document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+applyTheme();
+$('theme').onclick = () => { dark = !dark; applyTheme(); try { localStorage.setItem('frigate-setup-theme', dark ? 'dark' : 'light'); } catch {} };
+
+async function api(path, body) {
+  try {
+    const res = await fetch('api/' + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) });
+    let data = {};
+    try { data = await res.json(); } catch {}
+    if (!res.ok && !data.error) data.error = `HTTP ${res.status}` + (res.status === 503 ? ' (the plugin is not running)' : '');
+    return data || {};
+  } catch (e) { return { error: 'Matterbridge did not answer (' + e.message + ')' }; }
+}
+
+let state = { cameras: [], connection: {}, frigate: {} };
+let selected = null;
+let previewTimer = null, watchTimer = null;
+
+// ---------- Frigate connection ----------
+const CONN = ['frigateHost', 'frigatePort', 'frigateUser', 'frigatePassword', 'restreamPort', 'restreamUser', 'restreamPassword', 'mqttHost', 'mqttPort', 'mqttUser', 'mqttPassword', 'mqttTopicPrefix'];
+function connDraft() {
+  const d = {};
+  for (const f of CONN) d[f] = $('c_' + f).value;
+  d.mqttTls = $('c_mqttTls').checked;
+  return d;
+}
+function fillConn() {
+  for (const f of CONN) $('c_' + f).value = state.connection[f] ?? '';
+  $('c_mqttTls').checked = !!state.connection.mqttTls;
+  const h = state.frigate.mqttHint;
+  $('mqttHint').textContent = h ? `Frigate itself publishes to ${h.host}:${h.port} (prefix ${h.prefix}${h.user ? ', user ' + h.user : ''}). If "${h.host}" is a Docker name, use the broker's IP address here.` : '';
+}
+function renderConn() {
+  const f = state.frigate, c = state.connection;
+  const box = $('connSummary');
+  box.innerHTML = '';
+  const pill = $('frigatePill');
+  if (f.connected) {
+    pill.className = 'pill ok'; pill.textContent = 'Frigate ' + (f.version || 'connected');
+    box.append(el('div', {}, [el('b', { text: f.url })]));
+    const feed = f.feed;
+    if (feed) box.append(el('div', { class: 'muted', style: 'margin-top:4px' }, [`Detections: ${feed.via === 'mqtt' ? 'MQTT' : 'WebSocket'} `, el('span', { class: 'pill ' + (feed.connected ? 'ok' : 'bad'), text: feed.connected ? 'connected' : 'not connected' }), feed.error ? ' ' + feed.error : '', feed.messages ? ` · ${feed.messages} messages` : '']));
+  } else if (c.frigateHost) {
+    pill.className = 'pill bad'; pill.textContent = 'Frigate not connected';
+    box.append(el('div', {}, [el('b', { text: `${c.frigateHost}:${c.frigatePort}` })]));
+    box.append(el('div', { class: 'note bad', text: f.error ? f.error : 'Not connected: test the connection, save, and restart Matterbridge.' }));
+  } else {
+    pill.className = 'pill wait'; pill.textContent = 'No Frigate yet';
+    box.append(el('div', { class: 'muted', text: 'Frigate was not found yet. Search the network or enter its address.' }));
+    $('connForm').classList.remove('hidden');
+  }
+}
+$('connToggle').onclick = () => $('connForm').classList.toggle('hidden');
+$('findBtn').onclick = async () => {
+  const btn = $('findBtn'); btn.disabled = true; btn.replaceChildren(spin(), ' Searching…');
+  const list = $('foundList'); list.innerHTML = '';
+  list.append(el('div', { class: 'small muted', text: 'Looking on this machine and your network on ports 5000 and 8971 (about 10–20 s)…' }));
+  const r = await api('discover');
+  btn.disabled = false; btn.textContent = 'Search again';
+  list.innerHTML = '';
+  if (r.error) { list.append(el('div', { class: 'note bad', text: r.error })); return; }
+  if (!r.found.length) { list.append(el('div', { class: 'note wait', text: 'No Frigate answered. Enter its address above.' })); return; }
+  for (const f of r.found) list.append(el('div', { class: 'found' }, [
+    el('div', { class: 'grow' }, [el('b', { text: `${f.host}:${f.port}` }), el('div', { class: 'muted', text: f.version ? 'Frigate ' + f.version : f.needsLogin ? 'Frigate (needs a login)' : 'Frigate' })]),
+    el('button', { text: 'Use', onclick: () => { $('c_frigateHost').value = f.host; $('c_frigatePort').value = f.port; $('connTestBtn').click(); } }),
+  ]));
+};
+$('connTestBtn').onclick = async () => {
+  const btn = $('connTestBtn'); btn.disabled = true; btn.replaceChildren(spin(), ' Testing…');
+  const r = await api('connect', { connection: connDraft() });
+  btn.disabled = false; btn.textContent = 'Test';
+  const box = $('connResult'); box.innerHTML = '';
+  if (r.error) { box.append(el('div', { class: 'note bad', text: r.error })); return; }
+  const lines = [el('div', {}, [el('b', { text: `Frigate ${r.version}` }), ` · ${r.cameras.length} camera(s): ${r.cameras.map((c) => c.name).join(', ')}`])];
+  if (r.restream) lines.push(el('div', {}, ['Restream: ', r.restream.ok ? el('span', { class: 'pill ok', text: 'OK' }) : el('span', { class: 'pill bad', text: 'problem' }), ' ', r.restream.ok ? r.restream.title : r.restream.error]));
+  if (r.mqtt) lines.push(el('div', {}, ['MQTT: ', r.mqtt.ok ? el('span', { class: 'pill ok', text: 'connected' }) : el('span', { class: 'pill bad', text: 'not connected' }), ' ', r.mqtt.error || `${r.mqtt.messages} messages (${r.mqtt.topics.join(', ')})`]));
+  box.append(el('div', { class: 'note ok' }, lines));
+  if (r.mqttHint && !$('c_mqttHost').value) box.append(el('div', { class: 'small muted', style: 'margin-top:6px', text: `Frigate uses MQTT at ${r.mqttHint.host}:${r.mqttHint.port}. Optional: without it the plugin uses Frigate's WebSocket.` }));
+};
+$('connSaveBtn').onclick = async () => {
+  const r = await api('save-connection', { connection: connDraft() });
+  const box = $('connResult'); box.innerHTML = '';
+  box.append(el('div', { class: 'note ' + (r.error ? 'bad' : 'ok'), text: r.error ? 'Not saved: ' + r.error : r.restart ? 'Saved. Restart Matterbridge to connect with it.' : 'Nothing changed.' }));
+  if (!r.error) await load();
+};
+
+// ---------- cameras ----------
+const CHECKS = { enabled: [true, false], detections: [true, false], motion: [true, false], recording: [true, false], keepConnected: [true, false], liveAudio: ['opus', 'off'], clipAudio: ['aac', 'off'] };
+const FIELDS = ['title', 'stream', 'rotation', 'rtspUrl', ...Object.keys(CHECKS)];
+function chipValues(id) { return [...$(id).querySelectorAll('input:checked')].map((i) => i.value); }
+function draft() {
+  const d = {};
+  for (const f of FIELDS) {
+    const input = $('f_' + f);
+    d[f] = CHECKS[f] ? (input.checked ? CHECKS[f][0] : CHECKS[f][1]) : input.value;
+  }
+  d.objects = chipValues('objects');
+  d.zones = chipValues('zones');
+  return d;
+}
+function fill(cam) {
+  for (const f of FIELDS) {
+    const input = $('f_' + f);
+    if (CHECKS[f]) input.checked = cam[f] === CHECKS[f][0] || cam[f] === true;
+    else if (f !== 'stream') input.value = cam[f] ?? '';
+  }
+  $('f_title').placeholder = cam.frigateTitle || cam.name;
+  renderStreams(cam.streams, cam.defaultStream);
+  const chips = (id, all, chosen) => {
+    const box = $(id); box.innerHTML = '';
+    const values = [...new Set([...all, ...chosen])];
+    if (!values.length) box.append(el('span', { class: 'small muted', text: 'none in Frigate' }));
+    for (const v of values) box.append(el('label', { class: 'chip' }, [el('input', { type: 'checkbox', value: v, checked: chosen.includes(v) }), v]));
+  };
+  chips('objects', cam.frigateObjects, cam.objects);
+  chips('zones', cam.frigateZones, cam.zones);
+}
+function renderStreams(streams, def) {
+  const box = $('streams'); box.innerHTML = '';
+  if (!streams.length) box.append(el('div', { class: 'note wait', text: selected && selected.inFrigate ? 'No go2rtc restream checked yet for this camera: press "Check again". A camera needs a go2rtc stream in Frigate (or an RTSP URL below).' : 'Not a camera in Frigate.' }));
+  for (const s of streams) box.append(el('div', { class: 'stream' }, [
+    el('span', { class: 'dot small' + (s.ok ? '' : ' on'), style: s.ok ? 'background:var(--ok)' : '' }),
+    el('code', { text: s.name }), s.label ? el('span', { class: 'muted', text: s.label }) : null,
+    s.width ? `${s.width}×${s.height}` : '', s.codec ? el('span', { class: 'pill ' + (s.ok ? 'ok' : 'bad'), text: s.codec }) : null,
+    el('span', { class: 'muted', text: s.audio.length ? 'audio ' + s.audio.join(' + ') : 'no audio' }),
+    s.error ? el('span', { class: 'small', style: 'color:var(--bad)', text: s.error }) : null,
+    s.name === def ? el('span', { class: 'pill acc', text: 'default' }) : null,
+  ]));
+  const sel = $('f_stream'); sel.innerHTML = '';
+  sel.append(el('option', { value: '', text: def ? `Automatic (${def})` : 'Automatic' }));
+  for (const s of streams.filter((x) => x.ok)) sel.append(el('option', { value: s.name, text: s.title }));
+  sel.value = selected && streams.some((s) => s.ok && s.name === selected.stream) && selected.stream !== def ? selected.stream : '';
+}
+function dirty() {
+  if (!selected) return [];
+  const d = draft();
+  const changed = FIELDS.filter((f) => f !== 'stream' && String(d[f] ?? '') !== String(selected[f] ?? ''));
+  if (d.stream && d.stream !== selected.stream) changed.push('stream');
+  if (d.objects.slice().sort().join() !== selected.objects.slice().sort().join()) changed.push('objects');
+  if (d.zones.slice().sort().join() !== selected.zones.slice().sort().join()) changed.push('zones');
+  if (!selected.inSettings) changed.push('new');
+  return changed;
+}
+function updateSavebar() {
+  const changed = dirty();
+  $('savebar').classList.toggle('hidden', !changed.length);
+  $('saveText').textContent = changed.length ? `Unsaved changes: ${changed.join(', ')}` : '';
+}
+function statusPill(cam) {
+  if (cam.running) return cam.matter && cam.matter.commissioned ? el('span', { class: 'pill ok', text: 'Paired' }) : el('span', { class: 'pill wait', text: 'Ready to pair' });
+  if (!cam.inFrigate && !cam.rtspUrl) return el('span', { class: 'pill bad', text: 'Not in Frigate' });
+  if (cam.enabled) return el('span', { class: 'pill bad', text: 'Not running' });
+  return el('span', { class: 'pill', text: cam.inSettings ? 'Off' : 'New' });
+}
+function renderList() {
+  const list = $('cameraList'); list.innerHTML = '';
+  if (!state.cameras.length) list.append(el('div', { class: 'small muted', text: state.frigate.connected ? 'Frigate has no cameras.' : 'Connect Frigate first.' }));
+  for (const cam of state.cameras) {
+    list.append(el('button', { class: 'cam' + (selected && selected.name === cam.name ? ' sel' : ''), onclick: () => select(cam) }, [
+      el('div', { class: 'row' }, [el('b', { text: cam.title || cam.frigateTitle || cam.name }), statusPill(cam), cam.motionNow ? el('span', { class: 'pill bad', text: 'motion' }) : null]),
+      el('div', { class: 'small muted', text: `${cam.name}${cam.stream && cam.stream !== cam.name ? ' · go2rtc ' + cam.stream : ''}` }),
+    ]));
+  }
+}
+function renderMatter() {
+  const box = $('matter'); box.innerHTML = '';
+  const cam = selected;
+  if (!cam.running) {
+    box.append(el('div', { class: 'small muted', text: cam.enabled ? 'Switched on but not running: check the stream above and the Matterbridge log, or restart Matterbridge after saving.' : 'Switch on "Add to Matter", save, and restart Matterbridge: the pairing QR code appears here.' }));
+    return;
+  }
+  const m = cam.matter || {};
+  if (!m.available) { box.append(el('div', { class: 'small muted', text: 'Matter details are not available yet (the camera is starting).' })); return; }
+  if (m.commissioned) {
+    box.append(el('div', { class: 'note ok', text: m.fabrics.length ? 'Paired with: ' + m.fabrics.map((f) => f.label && f.vendor && f.label !== f.vendor ? `${f.vendor} (${f.label})` : f.vendor || f.label || 'a controller').join(', ') : 'Paired.' }));
+    return;
+  }
+  const qr = el('div', { class: 'code' }); qr.innerHTML = m.qrSvg || '';
+  box.append(el('div', { class: 'qr' }, [qr, el('div', {}, [
+    el('div', { class: 'small muted', text: 'Not paired yet. Scan with your controller app (SmartThings: Add device, Scan QR code), or type the code:' }),
+    el('div', { class: 'manual', text: m.manualCode || '' }),
+  ])]));
+}
+function renderStatus() {
+  const s = $('edStatus'); s.replaceChildren(statusPill(selected));
+  const notes = [];
+  if (!selected.inFrigate) notes.push('This camera is not in Frigate any more.');
+  if (!selected.inSettings) notes.push('Not in the plugin settings yet: Save adds it.');
+  if (selected.detect && selected.detect.width) notes.push(`Frigate detect stream ${selected.detect.width}×${selected.detect.height} (snapshots come from it).`);
+  if (selected.info) notes.push(selected.info);
+  $('edNote').textContent = notes.join(' ');
+}
+function select(cam) {
+  stopPreview(); stopWatch();
+  selected = cam;
+  $('emptyState').classList.add('hidden');
+  $('editorBody').classList.remove('hidden');
+  $('edTitle').textContent = cam.title || cam.frigateTitle || cam.name;
+  fill(cam);
+  renderStatus(); renderMatter(); renderList();
+  $('player').classList.add('hidden'); $('listenMsg').textContent = '';
+  $('viewer').replaceChildren(el('div', { class: 'msg', text: 'Press "Play 15 s" to see the stream with the settings below.' }));
+  $('events').textContent = '';
+  setMotion(cam.motionNow, cam.motionNow ? 'Motion in Matter now' : 'Motion in Matter');
+  updateSavebar();
+}
+
+$('streamsBtn').onclick = async () => {
+  const btn = $('streamsBtn'); btn.disabled = true; btn.replaceChildren(spin(), ' Checking…');
+  const r = await api('streams', { camera: selected.name });
+  btn.disabled = false; btn.textContent = 'Check again';
+  if (r.error) { $('streams').replaceChildren(el('div', { class: 'note bad', text: r.error })); return; }
+  selected.streams = r.streams; selected.defaultStream = r.defaultStream;
+  renderStreams(r.streams, r.defaultStream);
+};
+
+// ---------- preview ----------
+function stopPreview() {
+  clearTimeout(previewTimer); previewTimer = null;
+  $('playBtn').classList.remove('hidden'); $('stopBtn').classList.add('hidden'); $('previewInfo').textContent = '';
+}
+function showImage(src, badge) {
+  const viewer = $('viewer');
+  let img = viewer.querySelector('img');
+  if (!img) { viewer.innerHTML = ''; img = el('img', { alt: 'camera preview' }); viewer.append(img, el('span', { class: 'badge', id: 'badge' })); }
+  img.src = src; $('badge').textContent = badge;
+}
+async function pollPreview(restart) {
+  const r = await api('preview', { camera: selected.name, stream: $('f_stream').value || undefined, rotation: $('f_rotation').value, restart });
+  if (!previewTimer && !restart) return;
+  if (r.error) { $('viewer').replaceChildren(el('div', { class: 'msg', text: r.error })); stopPreview(); return; }
+  if (r.image) showImage(r.image, `${r.width}x${r.height}${r.shared ? ' · running stream' : ''}`);
+  else if (!$('viewer').querySelector('img')) $('viewer').replaceChildren(el('div', { class: 'msg' }, [spin(), ' Connecting to the stream…']));
+  const left = Math.ceil((r.left || 0) / 1000);
+  $('previewInfo').textContent = left > 0 ? `${left} s left` : '';
+  if (left <= 0) { stopPreview(); return; }
+  previewTimer = setTimeout(() => pollPreview(false), 700);
+}
+$('playBtn').onclick = () => { stopPreview(); $('playBtn').classList.add('hidden'); $('stopBtn').classList.remove('hidden'); previewTimer = setTimeout(() => {}, 0); pollPreview(true); };
+$('stopBtn').onclick = () => { api('preview-stop', { camera: selected.name }); stopPreview(); };
+for (const id of ['f_rotation', 'f_stream']) $(id).addEventListener('change', () => { if (previewTimer) { stopPreview(); $('playBtn').click(); } });
+$('snapBtn').onclick = async () => {
+  const btn = $('snapBtn'); btn.disabled = true;
+  const r = await api('snapshot', { camera: selected.name });
+  btn.disabled = false;
+  if (r.error) { $('viewer').replaceChildren(el('div', { class: 'msg', text: r.error })); return; }
+  showImage(r.image, `Frigate · ${r.width}x${r.height} · ${Math.round(r.bytes / 1000)} kB · ${r.ms} ms`);
+};
+
+// ---------- listen ----------
+$('listenBtn').onclick = async () => {
+  const btn = $('listenBtn'); btn.disabled = true;
+  $('listenMsg').replaceChildren(spin(), ' Recording 5 s of the stream sound…'); $('player').classList.add('hidden');
+  const r = await api('listen', { camera: selected.name, stream: $('f_stream').value || undefined });
+  btn.disabled = false;
+  if (r.error) { $('listenMsg').textContent = r.error; return; }
+  $('listenMsg').textContent = `${r.codec}, ${r.seconds.toFixed(1)} s`;
+  const p = $('player'); p.src = r.audio; p.classList.remove('hidden'); p.play().catch(() => {});
+};
+
+// ---------- detections ----------
+function setMotion(on, text) { $('motionDot').classList.toggle('on', !!on); $('motionText').textContent = text; }
+function stopWatch() { clearTimeout(watchTimer); watchTimer = null; $('watchBtn').disabled = false; }
+async function pollWatch(start) {
+  const r = await api('detections', { camera: selected.name, start });
+  if (r.error) { setMotion(false, r.error); stopWatch(); return; }
+  const events = r.events || [];
+  $('events').textContent = events.slice().reverse().map((e) => `${new Date(e.at).toLocaleTimeString()}  ${e.kind === 'motion' ? 'motion ' + (e.active ? 'on' : 'off') : e.text}`).join('\n') || 'Waiting for a detection… walk in front of the camera.';
+  if (r.shared) setMotion(r.active, r.active ? 'Motion in Matter now' : 'No motion in Matter now');
+  else setMotion(events.length && events[events.length - 1].active, r.feed && !r.feed.connected ? 'Event feed not connected: ' + (r.feed.error || '') : 'Test watch (camera not in Matter)');
+  if (r.left === 0) { stopWatch(); return; }
+  watchTimer = setTimeout(() => pollWatch(false), 1000);
+}
+$('watchBtn').onclick = () => { stopWatch(); $('watchBtn').disabled = true; pollWatch(true); };
+
+// ---------- save ----------
+$('saveBtn').onclick = async () => {
+  const btn = $('saveBtn'); btn.disabled = true;
+  const r = await api('save', { camera: selected.name, settings: draft() });
+  btn.disabled = false;
+  if (r.error) { $('saveText').textContent = 'Not saved: ' + r.error; return; }
+  await load(selected.name);
+  $('savebar').classList.remove('hidden');
+  $('saveText').textContent = r.restart ? 'Saved. Restart Matterbridge to apply (the restart button in Matterbridge).' : 'Nothing changed.';
+  setTimeout(updateSavebar, 6000);
+};
+$('revertBtn').onclick = () => { if (selected) select(state.cameras.find((c) => c.name === selected.name) || selected); };
+document.addEventListener('input', (e) => { if (e.target.closest && e.target.closest('#editorBody')) updateSavebar(); });
+document.addEventListener('change', (e) => { if (e.target.closest && e.target.closest('#editorBody')) updateSavebar(); });
+document.querySelectorAll('[data-eye]').forEach((b) => (b.onclick = () => { const input = $(b.dataset.eye); input.type = input.type === 'password' ? 'text' : 'password'; }));
+
+async function load(selectName) {
+  const data = await api('state');
+  if (data.error) { $('emptyState').textContent = 'The plugin did not answer: ' + data.error; return; }
+  state = data;
+  $('version').textContent = 'v' + (data.version || '');
+  fillConn(); renderConn();
+  const keep = selectName || (selected ? selected.name : null);
+  const cam = keep ? state.cameras.find((c) => c.name === keep) : null;
+  if (cam) select(cam); else { renderList(); if (!selected && state.cameras.length) select(state.cameras[0]); }
+}
+// pairing and motion change while the page is open: refresh the list and the Matter card
+setInterval(async () => {
+  if (document.hidden) return;
+  const data = await api('state');
+  if (data.error) return;
+  state.frigate = data.frigate; renderConn();
+  state.cameras = data.cameras.map((c) => { const old = state.cameras.find((o) => o.name === c.name); return old && old === selected ? Object.assign(old, { matter: c.matter, running: c.running, motionNow: c.motionNow }) : c; });
+  renderList();
+  if (selected) { renderMatter(); renderStatus(); if (!watchTimer) setMotion(selected.motionNow, selected.motionNow ? 'Motion in Matter now' : 'Motion in Matter'); }
+}, 5000);
+load();
+</script>
+</body>
+</html>

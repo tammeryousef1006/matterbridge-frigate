@@ -1,0 +1,9 @@
+OpenH264 commit 1bca62311e447fd9c39fc93de2c4b96cd5ce971c (Mon Oct 12 16:14:12 2026 +0800)
+
+snapshot.js (snap_decode once, then snap_encode per size): OpenH264 decoder (BSD-2-Clause, LICENSE.openh264) + stb_image_write v1.16 (public domain / MIT,
+https://github.com/nothings/stb) + snapshot.cpp, built with Emscripten 3.1.74:
+
+emcc -O3 -std=c++11 -I codec/api/wels -I codec/common/inc -I codec/decoder/core/inc -I codec/decoder/plus/inc \
+  codec/decoder/core/src/*.cpp codec/decoder/plus/src/welsDecoderExt.cpp codec/common/src/*.cpp snapshot.cpp \
+  -o snapshot.js -s MODULARIZE=1 -s EXPORT_NAME=createSnapshotModule -s ENVIRONMENT=node -s ALLOW_MEMORY_GROWTH=1 \
+  -s INITIAL_MEMORY=33554432 -s SINGLE_FILE=1 -s FILESYSTEM=0 -s EXPORTED_RUNTIME_METHODS=HEAPU8 -fno-exceptions

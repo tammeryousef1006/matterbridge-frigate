@@ -1,0 +1,54 @@
+{
+  "name": "matterbridge-frigate",
+  "version": "0.1.0",
+  "description": "Frigate NVR cameras in Matter",
+  "homepage": "https://github.com/tammeryousef1006/matterbridge-frigate#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tammeryousef1006/matterbridge-frigate.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tammeryousef1006/matterbridge-frigate/issues"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "rm -rf dist && tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "matterbridge",
+    "matterbridge-plugin",
+    "frigate",
+    "nvr",
+    "camera",
+    "matter",
+    "go2rtc",
+    "smartthings"
+  ],
+  "author": "Tamer Salah",
+  "license": "ISC",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "files": [
+    "dist/**/*.js",
+    "matterbridge-frigate.schema.json",
+    "README.md",
+    "CHANGELOG.md",
+    "THIRD-PARTY-NOTICES.md",
+    "LICENSE",
+    "vendor/**/*",
+    "apps/frontend/build",
+    "TESTING.md"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.15.18",
+    "typescript": "~5.9.3"
+  },
+  "funding": "https://buymeacoffee.com/6sjde6vkzl",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
