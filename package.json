@@ -46,7 +46,10 @@
     "@types/node": "^22.15.18",
     "typescript": "~5.9.3"
   },
-  "funding": "https://buymeacoffee.com/6sjde6vkzl",
+  "funding": {
+    "type": "buymeacoffee",
+    "url": "https://buymeacoffee.com/6sjde6vkzl"
+  },
   "publishConfig": {
     "access": "public",
     "provenance": true

@@ -54,6 +54,10 @@ Every camera is its **own Matter device** with its own QR code.
 
 Two-way talk (planned where go2rtc supports the camera's backchannel), PTZ.
 
+## Support
+
+If the plugin is useful to you, you can support its development: [Buy me a coffee](https://buymeacoffee.com/6sjde6vkzl).
+
 ## Licenses
 
 ISC for this plugin. The bundled codecs keep their licenses: see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

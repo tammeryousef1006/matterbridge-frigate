@@ -25,4 +25,5 @@ First release, made from the matterbridge-claude 0.9.8 camera test plugin.
   (clips, snapshots, live view via CVO) and the microphone volume slider, as in 0.9.8.
 - Plugin page (globe icon): Frigate connection (search, test with restream and MQTT check, save), and per camera:
   streams, 15 s preview, Frigate snapshot, listen 5 s, detections, settings, pairing QR / "Paired with".
+- Sponsor link (Buy me a coffee) on the plugin page, in the README and in package.json.
 - Removed from 0.9.8: ONVIF, Tapo discovery, Tapo two-way talk (two-way talk comes later where go2rtc supports it).

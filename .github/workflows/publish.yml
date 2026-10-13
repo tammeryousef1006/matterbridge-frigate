@@ -1,15 +1,23 @@
-# Publishes to npm when a version tag is pushed (v<version>, matching package.json):
-#   git tag v0.1.1 && git push origin v0.1.1
+# Publishes to npm when the version in package.json changes on main (or with "Run workflow").
+# A version that is already on npm is skipped, so other pushes never publish anything.
+# After publishing it adds the tag v<version> and a GitHub release with that version's CHANGELOG part.
+# New version: change "version" in package.json, add it to CHANGELOG.md, push to main.
 # Needs the repository secret NPM_TOKEN (an npm granular token with publish rights).
 name: Publish to npm
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+    paths: [package.json]
+  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # tag and release
   id-token: write # npm provenance: shows on npm that the package was built here
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -20,14 +28,36 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-      - name: Check the tag matches package.json
+      - name: Is this version new?
+        id: version
         run: |
+          NAME=$(node -p "require('./package.json').name")
           VERSION=$(node -p "require('./package.json').version")
-          if [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then echo "Release tag ${GITHUB_REF_NAME} does not match package.json version v${VERSION}"; exit 1; fi
-      - run: npm install --no-audit --no-fund
-      - run: npm install --no-save --no-audit --no-fund matterbridge@3.10.13
-      - run: npm run build
-      - run: npm pack --dry-run
-      - run: npm publish
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "$NAME@$VERSION is already on npm: nothing to publish"
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$NAME@$VERSION is new: publishing"
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.version.outputs.new == 'true'
+        run: npm install --no-audit --no-fund
+      - if: steps.version.outputs.new == 'true'
+        run: npm install --no-save --no-audit --no-fund matterbridge@3.10.13
+      - if: steps.version.outputs.new == 'true'
+        run: npm run build
+      - if: steps.version.outputs.new == 'true'
+        run: npm pack --dry-run
+      - if: steps.version.outputs.new == 'true'
+        run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Tag and GitHub release
+        if: steps.version.outputs.new == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          awk -v v="$VERSION" '$0 ~ "^## "v {f=1; next} /^## /{f=0} f' CHANGELOG.md > notes.md
+          gh release create "v$VERSION" --target "$GITHUB_SHA" --title "$VERSION" --notes-file notes.md

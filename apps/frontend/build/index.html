@@ -115,6 +115,8 @@
   .stream { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 14px; }
   .stream code { font-size: 13px; }
   .dot.small { width: 10px; height: 10px; }
+  .sponsor { font-size: 13px; font-weight: 600; color: var(--accent); text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+  .sponsor:hover, .sponsor:focus-visible { border-color: var(--accent); }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   details.more { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
   details.more > summary { font-weight: 600; color: var(--fg); font-size: 14px; }
@@ -128,6 +130,7 @@
   <div class="grow"></div>
   <span class="pill" id="frigatePill"></span>
   <span class="pill" id="version"></span>
+  <a class="sponsor" href="https://buymeacoffee.com/6sjde6vkzl" target="_blank" rel="noopener" title="Support the plugin">☕ Buy me a coffee</a>
   <button class="link" id="theme" title="Light / dark">Theme</button>
 </header>
 
