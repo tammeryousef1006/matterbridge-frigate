@@ -41,6 +41,23 @@ ignore fabric-not-found, no ffmpeg, stream stability first, explain simply).
   Frigate restarts recovered, page in Chromium (desktop light, phone dark) no errors, save writes one camera only.
 - NOT tested: real SmartThings pairing / live view / clip upload (needs the user's network), Bun runtime.
 
+## 0.2.0 (published from GitHub, 2026-10-13)
+- Repo https://github.com/tammeryousef1006/matterbridge-frigate; npm publish runs when package.json version changes on
+  main (workflow skips versions already on npm, then tags + GitHub release). This cloud session cannot push tags or
+  create releases. npm staged publishing: first upload showed 0.0.0-stage, released by npm a minute later.
+- License ISC (same as tapo/ewelink/ttlock); sponsor link in package.json funding, README, page, FUNDING.yml.
+- README like the other plugins + install.sh/docker-install.sh/uninstall.sh/docker-uninstall.sh (copied from the Tapo
+  installers; Frigate extras: firewall 5541-5560 and UDP 50000-50100, MATTERBRIDGE_ICE_PORT_RANGE via systemd drop-in
+  frigate-webrtc.conf or docker -e).
+- PTZ (experimental, src/ptz.ts): only when Frigate camera has onvif: and /api/<cam>/ptz/info reports pt or zoom.
+  matter.js CameraAvSettingsUserLevelManagementServer.with(features) subclass; relative/absolute -> MOVE_* then STOP
+  (25 ms/degree, 400 ms/zoom step), presets -> PRESET_<name> (Frigate lowercases names), save/remove refused.
+  Sent via DetectionFeed.send (WS {"topic":"<cam>/ptz","payload":...} or MQTT <prefix>/<cam>/ptz). Per-camera ptz switch.
+  Tested: real matter.js controller paired with the camera and sent all PTZ commands (Node); fixed camera with ONVIF
+  gets no PTZ cluster. No real PTZ camera tested.
+- Test env notes: container has no IPv6 -> tests/noipv6.cjs preload (UDP sockets reuseAddr + loopback); Bun cannot
+  start Matter nodes here, but plugin-level tests pass on Bun 1.4.2.
+
 ## Open items / ideas
 - User test of 0.1.0 (TESTING.md in the package).
 - Two-way talk via go2rtc backchannel; Frigate review items (alerts) as an alternative trigger; PTZ.

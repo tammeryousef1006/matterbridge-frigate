@@ -13,6 +13,7 @@ import { CameraMedia, camerasByEndpoint, camerasByUrl, installMediaPatches, patc
 import { PreRollBuffer, RecordingStore } from './pushav.js';
 import { FrigateZoneServer, createRecording, pushAvDefaults, setRecordingLog, timeSyncDefaults, tlsCertificateDefaults, tlsClientDefaults, zoneDefaults } from './recording.js';
 import { RtspSource } from './rtsp.js';
+import { FrigatePtzInfo, PtzRunner, createPtz, hasPtz } from './ptz.js';
 import { RunningCamera, SetupApi } from './setup.js';
 import { RestreamSettings, StreamInfo, checkStream, defaultStream, redactUrl, restreamUrl, streamTitle } from './streams.js';
 
@@ -42,6 +43,8 @@ export interface CameraConfig {
   motion?: boolean;
   recording?: boolean;
   keepConnected?: boolean;
+  /** PTZ controls in Matter for cameras Frigate controls over ONVIF (experimental, default on). */
+  ptz?: boolean;
   /** Read-only notes written by the plugin. */
   info?: string;
 }
@@ -73,6 +76,9 @@ export class FrigatePlatform extends MatterbridgeDynamicPlatform {
   private readonly sources: RtspSource[] = [];
   private readonly preRolls: PreRollBuffer[] = [];
   private readonly detections = new Map<string, CameraDetections>();
+  /** PTZ of each camera, as Frigate reports it. */
+  readonly ptzInfo = new Map<string, FrigatePtzInfo>();
+  private ptzCameras = 0;
   private feed?: DetectionFeed;
   frigate?: FrigateClient;
   frigateConfig?: FrigateConfig;
@@ -93,6 +99,7 @@ export class FrigatePlatform extends MatterbridgeDynamicPlatform {
       config: () => this.cfg,
       frigate: () => ({ client: this.frigate, config: this.frigateConfig, cameras: this.frigateCameras, error: this.frigateError, feed: this.feed?.status }),
       streams: (name) => this.streamInfo.get(name),
+      ptz: (name) => this.ptzInfo.get(name),
       restream: () => this.restreamSettings(),
       saveConfig: (changes) => {
         Object.assign(this.cfg, changes);
@@ -193,6 +200,22 @@ export class FrigatePlatform extends MatterbridgeDynamicPlatform {
       }
     }
     this.updateStreamChoices(enabled);
+
+    // PTZ (experimental): what Frigate can move on each camera it controls over ONVIF
+    await Promise.all(
+      enabled.slice(0, MAX_CAMERAS).map(async (camera) => {
+        const frigateCamera = this.frigateCameras.find((f) => f.name === camera.name);
+        // asked also when switched off in the settings, so the plugin page can offer to switch it on
+        if (!frigateCamera?.onvif || !this.frigate) return;
+        try {
+          const info = await this.frigate.ptzInfo(camera.name);
+          this.ptzInfo.set(camera.name, info);
+          this.log.info(`${camera.name}: ONVIF in Frigate: ${hasPtz(info) ? `PTZ ${info.features.join(', ')}; presets: ${info.presets.join(', ') || 'none'}` : 'no pan/tilt/zoom'}`);
+        } catch (error) {
+          this.log.warn(`${camera.name}: could not read PTZ from Frigate: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }),
+    );
     if (changed) this.saveConfig(this.config);
 
     // 4. Matter cameras
@@ -219,7 +242,7 @@ export class FrigatePlatform extends MatterbridgeDynamicPlatform {
     }
 
     // 5. Detections: MQTT when filled in, else Frigate's WebSocket
-    if (this.detections.size) this.startDetections();
+    if (this.detections.size || this.ptzCameras) this.startDetections();
   }
 
   /** A per-camera "Stream" choice in the settings form, from the go2rtc streams found. */
@@ -323,8 +346,29 @@ export class FrigatePlatform extends MatterbridgeDynamicPlatform {
       device.behaviors.require(rec.PushAv, pushAvDefaults);
       if (hasDetections) device.behaviors.require(FrigateZoneServer, zoneDefaults(width, height));
     }
+    // PTZ (experimental): Matter's pan/tilt/zoom, sent to Frigate
+    const ptzInfo = camera.ptz === false ? undefined : this.ptzInfo.get(camera.name);
+    let ptz: ReturnType<typeof createPtz> | undefined;
+    let ptzRunner: PtzRunner | undefined;
+    if (hasPtz(ptzInfo)) {
+      ptzRunner = new PtzRunner(camera.name, (command) => this.feed?.send(`${camera.name}/ptz`, command) ?? false, (level, message) => this.log[level](message));
+      ptz = createPtz(camera.name, ptzInfo!, ptzRunner, (level, message) => this.log[level](message));
+      device.behaviors.require(ptz.Behavior, ptz.defaults);
+      this.ptzCameras++;
+      if (frigateCamera?.autotracking) this.log.warn(`${camera.name}: Frigate's PTZ autotracking is on: moves from the controller and autotracking will fight each other`);
+    }
     await this.registerDevice(device);
     const runningCamera: RunningCamera = { name: camera.name, title, rtspUrl, source, width, height };
+    if (ptz && ptzRunner) {
+      const Behavior = ptz.Behavior;
+      const act = (device as unknown as { act: (fn: (agent: { get: (t: unknown) => unknown }) => unknown) => Promise<unknown> }).act.bind(device);
+      runningCamera.ptz = {
+        info: ptzInfo!,
+        runner: ptzRunner,
+        // the plugin page goes through the same Matter commands as a controller
+        command: (name, request) => act((agent) => (agent.get(Behavior) as unknown as Record<string, (r: unknown) => void>)[name](request)).then(() => undefined),
+      };
+    }
     Object.defineProperty(runningCamera, 'serverNode', { get: () => (device as unknown as { serverNode?: unknown }).serverNode, enumerable: true });
     this.running.set(camera.name, runningCamera);
     if (rec) {
@@ -347,6 +391,7 @@ export class FrigatePlatform extends MatterbridgeDynamicPlatform {
       `${width}x${height} from ${camera.rtspUrl ? redactUrl(camera.rtspUrl) : `go2rtc "${camera.stream}"`}`,
       liveAudio === 'off' ? 'no live audio' : 'live audio',
       recording ? `recording${source.clipAudio === 'off' ? ' without audio' : ''}` : 'no recording',
+      ptz ? `PTZ (experimental: ${ptzInfo!.features.filter((f) => f === 'pt' || f === 'zoom').join(', ')}${ptzInfo!.presets.length ? `, ${ptzInfo!.presets.length} presets` : ''})` : '',
       hasDetections ? `detections (${camera.objects?.length ? camera.objects.join(', ') : 'all objects'}${camera.zones?.length ? ` in ${camera.zones.join(', ')}` : ''}${camera.motion ? ', motion' : ''})` : 'no detections',
       rotation ? `turned ${rotation}°` : '',
     ].filter(Boolean);

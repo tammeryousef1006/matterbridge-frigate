@@ -117,6 +117,10 @@
   .dot.small { width: 10px; height: 10px; }
   .sponsor { font-size: 13px; font-weight: 600; color: var(--accent); text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
   .sponsor:hover, .sponsor:focus-visible { border-color: var(--accent); }
+  .ptzgrid { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .pad { display: grid; grid-template-columns: repeat(3, 40px); grid-template-rows: repeat(3, 40px); gap: 4px; }
+  .pad button, .zoom button { padding: 0; width: 40px; height: 40px; font-size: 16px; }
+  .zoom { display: flex; flex-direction: column; gap: 4px; }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   details.more { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
   details.more > summary { font-weight: 600; color: var(--fg); font-size: 14px; }
@@ -222,6 +226,21 @@
         </div>
       </div>
 
+      <div class="card hidden" id="ptzCard">
+        <h2>Pan, tilt and zoom <span class="pill wait">experimental</span><span class="grow"></span></h2>
+        <div class="ptzgrid">
+          <div class="pad" role="group" aria-label="Move the camera">
+            <span></span><button id="ptz_up" title="Up">▲</button><span></span>
+            <button id="ptz_left" title="Left">◀</button><span></span><button id="ptz_right" title="Right">▶</button>
+            <span></span><button id="ptz_down" title="Down">▼</button><span></span>
+          </div>
+          <div class="zoom"><button id="ptz_zoomIn" title="Zoom in">＋</button><button id="ptz_zoomOut" title="Zoom out">－</button></div>
+          <label class="f" style="min-width:180px">Preset<select id="ptzPreset"></select></label>
+          <button id="ptzGo">Go to preset</button>
+        </div>
+        <div class="small muted" id="ptzMsg" style="margin-top:8px">Moves go through the same Matter commands as your controller, then to Frigate. Watch the camera in the preview or in Frigate.</div>
+      </div>
+
       <div class="card">
         <h2>Detections <span class="grow"></span><button id="watchBtn">Watch</button></h2>
         <div class="motion"><span class="dot" id="motionDot"></span><span id="motionText">Motion in Matter</span></div>
@@ -241,6 +260,7 @@
           <label class="tg"><input type="checkbox" id="f_clipAudio"><span>Clip audio<small>AAC in recorded clips</small></span></label>
           <label class="tg"><input type="checkbox" id="f_recording"><span>Recording<small>Clips saved by the hub (SmartThings cloud)</small></span></label>
           <label class="tg"><input type="checkbox" id="f_keepConnected"><span>Keep the stream connected<small>Faster live view when recording is off</small></span></label>
+          <label class="tg hidden" id="ptzRow"><input type="checkbox" id="f_ptz"><span>Pan, tilt and zoom (experimental)<small>Controls in the Matter app for a PTZ camera Frigate controls over ONVIF</small></span></label>
         </div>
         <details class="more"><summary>RTSP URL instead of go2rtc</summary>
           <label class="f" style="margin-top:8px">RTSP URL <span class="hint">Only for a camera without a go2rtc restream (H.264)</span><input type="text" id="f_rtspUrl" placeholder="rtsp://user:password@camera-ip:554/path" autocomplete="off"></label>
@@ -367,7 +387,7 @@ $('connSaveBtn').onclick = async () => {
 };
 
 // ---------- cameras ----------
-const CHECKS = { enabled: [true, false], detections: [true, false], motion: [true, false], recording: [true, false], keepConnected: [true, false], liveAudio: ['opus', 'off'], clipAudio: ['aac', 'off'] };
+const CHECKS = { enabled: [true, false], detections: [true, false], motion: [true, false], recording: [true, false], keepConnected: [true, false], ptz: [true, false], liveAudio: ['opus', 'off'], clipAudio: ['aac', 'off'] };
 const FIELDS = ['title', 'stream', 'rotation', 'rtspUrl', ...Object.keys(CHECKS)];
 function chipValues(id) { return [...$(id).querySelectorAll('input:checked')].map((i) => i.value); }
 function draft() {
@@ -444,6 +464,28 @@ function renderList() {
     ]));
   }
 }
+function renderPtz() {
+  const cam = selected;
+  $('ptzRow').classList.toggle('hidden', !cam.ptzAvailable);
+  const info = cam.ptzInfo;
+  $('ptzCard').classList.toggle('hidden', !info);
+  if (!info) return;
+  const pt = info.features.includes('pt'), zoom = info.features.includes('zoom');
+  for (const d of ['up', 'down', 'left', 'right']) $('ptz_' + d).disabled = !pt;
+  for (const z of ['zoomIn', 'zoomOut']) $('ptz_' + z).disabled = !zoom;
+  const sel = $('ptzPreset'); sel.innerHTML = '';
+  for (const p of info.presets) sel.append(el('option', { value: p, text: p }));
+  sel.disabled = $('ptzGo').disabled = !info.presets.length;
+  if (!info.presets.length) sel.append(el('option', { value: '', text: 'No presets in the camera' }));
+}
+async function ptz(action, preset) {
+  $('ptzMsg').replaceChildren(spin(), ' Moving…');
+  const r = await api('ptz', { camera: selected.name, action, preset });
+  $('ptzMsg').textContent = r.error ? r.error : 'Sent to Frigate: ' + (r.sent || []).slice(-4).join(', ');
+}
+for (const a of ['up', 'down', 'left', 'right', 'zoomIn', 'zoomOut']) $('ptz_' + a).onclick = () => ptz(a);
+$('ptzGo').onclick = () => ptz('preset', $('ptzPreset').value);
+
 function renderMatter() {
   const box = $('matter'); box.innerHTML = '';
   const cam = selected;
@@ -479,7 +521,7 @@ function select(cam) {
   $('editorBody').classList.remove('hidden');
   $('edTitle').textContent = cam.title || cam.frigateTitle || cam.name;
   fill(cam);
-  renderStatus(); renderMatter(); renderList();
+  renderStatus(); renderMatter(); renderPtz(); renderList();
   $('player').classList.add('hidden'); $('listenMsg').textContent = '';
   $('viewer').replaceChildren(el('div', { class: 'msg', text: 'Press "Play 15 s" to see the stream with the settings below.' }));
   $('events').textContent = '';

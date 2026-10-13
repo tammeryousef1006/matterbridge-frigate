@@ -81,6 +81,16 @@ export class DetectionFeed {
     else this.startWebSocket(options.frigate);
   }
 
+  private prefix = 'frigate';
+
+  /** Send a command topic to Frigate (e.g. "<camera>/ptz"), over MQTT or the WebSocket. False when not connected. */
+  send(topic: string, payload: string): boolean {
+    if (this.mqtt) return this.mqtt.publish(`${this.prefix}/${topic}`, payload);
+    if (!this.ws || !this.status.connected) return false;
+    this.ws.send(JSON.stringify({ topic, payload }));
+    return true;
+  }
+
   stop(): void {
     this.stopped = true;
     this.mqtt?.stop();
@@ -106,6 +116,7 @@ export class DetectionFeed {
 
   private startMqtt(options: MqttOptions & { prefix?: string }): void {
     const prefix = (options.prefix || 'frigate').replace(/\/+$/, '');
+    this.prefix = prefix;
     this.status.via = 'mqtt';
     this.status.target = `${options.host}:${options.port ?? (options.tls ? 8883 : 1883)} (${prefix}/#)`;
     this.mqtt = new MqttClient(

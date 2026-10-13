@@ -1,6 +1,6 @@
 {
   "name": "matterbridge-frigate",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Frigate NVR cameras in Matter",
   "homepage": "https://github.com/tammeryousef1006/matterbridge-frigate#readme",
   "repository": {

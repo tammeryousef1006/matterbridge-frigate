@@ -13,6 +13,7 @@ import { g711ToPcm, wav } from './audio.js';
 import { CameraDetections, DetectionFeed, DetectionStatus } from './detections.js';
 import { FrigateCamera, FrigateClient, FrigateConfig, camerasFromConfig, discoverFrigate, fitLatestJpeg, mqttHint } from './frigate.js';
 import { MqttClient } from './mqtt.js';
+import { FrigatePtzInfo, PtzRunner, hasPtz } from './ptz.js';
 import type { CameraConfig, FrigatePluginConfig } from './platform.js';
 import { AccessUnit, RtspSource, isG711 } from './rtsp.js';
 import { snapshotFromKeyframe } from './snapshot.js';
@@ -28,6 +29,8 @@ export interface RunningCamera {
   height: number;
   serverNode?: unknown;
   detections?: CameraDetections;
+  /** PTZ (experimental), when Frigate can move this camera. */
+  ptz?: { info: FrigatePtzInfo; runner: PtzRunner; command: (name: 'mptzRelativeMove' | 'mptzMoveToPreset', request: unknown) => Promise<void> };
 }
 
 /** The platform parts the page uses. */
@@ -36,6 +39,8 @@ export interface SetupHost {
   config(): FrigatePluginConfig;
   frigate(): { client?: FrigateClient; config?: FrigateConfig; cameras: FrigateCamera[]; error?: string; feed?: DetectionStatus };
   streams(name: string): StreamInfo[] | undefined;
+  /** PTZ as Frigate reports it (asked at startup for cameras with ONVIF in Frigate). */
+  ptz(name: string): FrigatePtzInfo | undefined;
   restream(): RestreamSettings | undefined;
   /** Merges these settings into the config, saves it and asks Matterbridge for a restart. */
   saveConfig(changes: Partial<FrigatePluginConfig>): void;
@@ -154,6 +159,8 @@ export class SetupApi {
           return this.detections(camera, input.start === true);
         case 'save':
           return this.save((input.settings as Partial<CameraConfig>) ?? {}, camera);
+        case 'ptz':
+          return await this.ptz(camera, String(input.action ?? ''), input.preset);
         default:
           return method === 'GET' ? undefined : { error: `unknown request ${path ?? ''}` };
       }
@@ -233,6 +240,9 @@ export class SetupApi {
       motion: camera?.motion === true,
       recording: camera ? camera.recording !== false : true,
       keepConnected: camera?.keepConnected === true,
+      ptz: camera?.ptz !== false,
+      ptzInfo: running?.ptz ? { features: running.ptz.info.features, presets: running.ptz.info.presets, sent: running.ptz.runner.sent.slice(-8) } : null,
+      ptzAvailable: hasPtz(this.host.ptz(name)),
       info: camera?.info ?? '',
       frigateObjects: frigateCamera?.objects ?? [],
       frigateZones: frigateCamera?.zones ?? [],
@@ -534,6 +544,25 @@ export class SetupApi {
     this.watch = undefined;
   }
 
+  // ---- PTZ (experimental): the same Matter commands a controller sends ----
+
+  private async ptz(name: string, action: string, preset: unknown): Promise<unknown> {
+    const ptz = this.host.running(name)?.ptz;
+    if (!ptz) return { error: 'this camera has no PTZ in Matter (Frigate does not report pan/tilt/zoom for it, or it is not running)' };
+    if (action === 'preset') {
+      const index = ptz.info.presets.indexOf(String(preset));
+      if (index < 0) return { error: `unknown preset ${String(preset)}` };
+      await ptz.command('mptzMoveToPreset', { presetId: index + 1 });
+    } else if (PTZ_ACTIONS[action]) {
+      await ptz.command('mptzRelativeMove', PTZ_ACTIONS[action]);
+    } else {
+      return { error: `unknown PTZ action ${action}` };
+    }
+    // the move runs for a moment; report what went to Frigate once it is done
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    return { ok: true, sent: ptz.runner.sent.slice(-8) };
+  }
+
   // ---- save: only this camera entry, checked field by field ----
 
   private save(settings: Partial<CameraConfig>, name: string): unknown {
@@ -568,6 +597,7 @@ export class SetupApi {
       motion: settings.motion === true,
       recording: settings.recording !== false,
       keepConnected: settings.keepConnected === true,
+      ptz: settings.ptz !== false,
     };
     for (const key of Object.keys(entry) as (keyof CameraConfig)[]) if (entry[key] === undefined) delete entry[key];
     if (index >= 0) cameras[index] = entry;
@@ -579,6 +609,15 @@ export class SetupApi {
     return { ok: true, changed, restart: true };
   }
 }
+
+const PTZ_ACTIONS: Record<string, { panDelta?: number; tiltDelta?: number; zoomDelta?: number }> = {
+  left: { panDelta: -10 },
+  right: { panDelta: 10 },
+  up: { tiltDelta: 10 },
+  down: { tiltDelta: -10 },
+  zoomIn: { zoomDelta: 1 },
+  zoomOut: { zoomDelta: -1 },
+};
 
 function sameStream(a: string, b: string): boolean {
   try {

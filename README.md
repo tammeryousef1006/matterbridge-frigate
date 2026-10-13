@@ -15,6 +15,7 @@ A [Matterbridge](https://github.com/Luligu/matterbridge) plugin that brings the 
 - **Detections as motion:** person, car, dog... from Frigate start a clip and show on the controller's timeline. Choose which objects count, and in which Frigate zones.
 - **Snapshots** for the camera tile, from Frigate.
 - **Cloud clips** (Matter Push AV) with a few seconds from before the detection.
+- **Pan, tilt and zoom (experimental)** for PTZ cameras that Frigate controls: arrows, zoom and the camera's presets in the Matter app. Fixed cameras are not affected.
 - **A setup page** in Matterbridge (globe icon): Frigate connection, preview, sound check, detections and the pairing QR code of each camera.
 - Works with Frigate's open port 5000 or its login port 8971 (any Frigate user), with or without MQTT.
 
@@ -177,6 +178,23 @@ For most setups there is nothing to fill in: the plugin finds Frigate, reads its
 - **Which detections count:** by default every object Frigate tracks for the camera. On the plugin page you can tick only some (for example *person*) and only some Frigate zones (for example *porch*). Parked cars and other stationary objects do not count.
 - **MQTT (optional):** without it the plugin follows Frigate's own WebSocket, which needs nothing. If you prefer your MQTT broker, enter it in the settings (use its IP address, not a Docker name such as `mqtt`).
 
+## Pan, tilt and zoom (experimental)
+
+For a PTZ camera, the controller app gets arrows, zoom and the camera's presets. The plugin passes them to Frigate, which moves the camera over ONVIF. Nothing to set up in the plugin; it is only switched on for cameras where:
+
+1. the camera has an `onvif:` section in the Frigate config (host, port, user, password), and
+2. Frigate reports it can pan/tilt or zoom it (the arrows work in Frigate's own live view).
+
+Fixed cameras, also ones with ONVIF set up in Frigate, stay exactly as they are.
+
+- **Arrows and zoom** move the camera for a moment, then stop. A bigger step in the app moves longer.
+- **Presets** are the ones saved in the camera (with their names), as Frigate lists them. Saving or removing presets from the controller app is not possible: do that in the camera's own app, then restart Matterbridge.
+- **Exact positions** (for example "pan 30°") are estimated from the last moves, because Frigate has no command for an absolute position.
+- **Autotracking:** if Frigate's PTZ autotracking is on for the camera, moves from the app and autotracking fight each other. The log warns about it.
+- To switch it off for a camera: untick **Pan, tilt and zoom** on the plugin page (or `ptz: false`). After switching it on or off, remove the camera from the controller app and pair it again if the controls do not change.
+
+This is new and tested with a simulated Frigate only. If you have a PTZ camera, please report in an [issue](https://github.com/tammeryousef1006/matterbridge-frigate/issues) whether it works.
+
 ## Configuration
 
 | Option | Description |
@@ -187,7 +205,7 @@ For most setups there is nothing to fill in: the plugin finds Frigate, reads its
 | `restreamPort` / `restreamUser` / `restreamPassword` | go2rtc's RTSP restream (default port `8554`; user and password only if go2rtc has them) |
 | `mqttHost` / `mqttPort` / `mqttTls` / `mqttUser` / `mqttPassword` / `mqttTopicPrefix` | Optional MQTT broker Frigate publishes to. Empty: Frigate's WebSocket |
 | `addNewCameras` | Add Frigate cameras that are not in the list yet (default `true`) |
-| `cameras` | Per camera: `enabled`, `title` (name in Matter), `stream` (go2rtc stream), `rtspUrl`, `rotation`, `liveAudio`, `clipAudio`, `detections`, `objects`, `zones`, `motion` (Frigate motion counts too), `recording`, `keepConnected` |
+| `cameras` | Per camera: `enabled`, `title` (name in Matter), `stream` (go2rtc stream), `rtspUrl`, `rotation`, `liveAudio`, `clipAudio`, `detections`, `objects`, `zones`, `motion` (Frigate motion counts too), `recording`, `keepConnected`, `ptz` (pan, tilt and zoom, default on where Frigate supports it) |
 | `debug` | Enable debug logging |
 
 ## Troubleshooting
@@ -199,6 +217,7 @@ For most setups there is nothing to fill in: the plugin finds Frigate, reads its
 - **No sound in live view**: see *Live audio* in [Setup](#setup).
 - **Live view does not start after pairing**: restart Matterbridge once.
 - **Live view stays black with a firewall**: run the installer again (it opens the ports and sets the live view port range), or open UDP 50000–50100 and 5541–5560 yourself and set `MATTERBRIDGE_ICE_PORT_RANGE=50000-50100` for Matterbridge.
+- **No PTZ controls for a PTZ camera**: the log line `ONVIF in Frigate: ...` at startup says what Frigate reported. Check that the arrows work in Frigate's live view and that the camera has an `onvif:` section; then remove the camera from the controller app and pair it again.
 - **No motion**: on the plugin page, press **Watch** and walk past the camera. If nothing shows, check that Frigate detects objects on that camera and that the objects and zones you ticked match.
 
 ## How it works
@@ -209,6 +228,7 @@ For most setups there is nothing to fill in: the plugin finds Frigate, reads its
 | Live audio | go2rtc's Opus as is, or G.711 → Opus | built-in Opus codec (WebAssembly) |
 | Motion | `events` (WebSocket `/ws` or MQTT) | moving, real objects of the chosen labels and zones; ends with the event |
 | Clips | restream + a few seconds before | CMAF over mutual TLS to the controller's cloud; AAC audio (built-in encoder) |
+| PTZ | `<camera>/ptz` commands (WebSocket or MQTT), `/api/<camera>/ptz/info` | continuous moves then stop, presets |
 | Snapshots | `/api/<camera>/latest.jpg` | fitted to the 64 KB Matter limit; built-in H.264 decoder as backup |
 
 ## Development

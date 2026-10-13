@@ -87,6 +87,13 @@ export class MqttClient {
     this.setConnected(false);
   }
 
+  /** Publish a message (QoS 0). False when not connected. */
+  publish(topic: string, payload: string): boolean {
+    if (!this.connected || !this.socket) return false;
+    this.socket.write(packet(3, 0, Buffer.concat([utf8(topic), Buffer.from(payload, 'utf8')])));
+    return true;
+  }
+
   private setConnected(value: boolean): void {
     if (this.connected === value) return;
     this.connected = value;

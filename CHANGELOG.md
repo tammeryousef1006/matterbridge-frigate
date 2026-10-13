@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0 (2026-10-13)
+
+- **Pan, tilt and zoom (experimental)** for PTZ cameras that Frigate controls over ONVIF: Matter's camera PTZ
+  (arrows, zoom, the camera's presets) is sent to Frigate as its PTZ commands, over its WebSocket or MQTT. Only for
+  cameras Frigate reports as PTZ; fixed cameras are not affected. Per-camera switch `ptz`, PTZ card on the plugin page.
+  Saving/removing presets from the controller is refused (Frigate cannot create presets).
+- Plugin page: says when a PTZ move could not be sent because Frigate is not connected.
+- README in the layout of my other plugins, with one-line installers (standalone and Docker) that install
+  Matterbridge with this plugin; with an active firewall they open the camera and live view ports.
+
 ## 0.1.0 (2026-10-13)
 
 First release, made from the matterbridge-claude 0.9.8 camera test plugin.

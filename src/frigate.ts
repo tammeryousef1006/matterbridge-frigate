@@ -57,6 +57,7 @@ export interface FrigateCameraConfig {
   objects?: { track?: string[] };
   zones?: Record<string, unknown>;
   audio?: { enabled?: boolean };
+  onvif?: { host?: string; port?: number; autotracking?: { enabled?: boolean } };
   record?: { enabled?: boolean };
   ui?: { order?: number; dashboard?: boolean };
   friendly_name?: string;
@@ -88,6 +89,10 @@ export interface FrigateCamera {
   objects: string[];
   zones: string[];
   streams: StreamCandidate[];
+  /** Frigate controls this camera over ONVIF (it may have PTZ). */
+  onvif: boolean;
+  /** Frigate's PTZ autotracking is on. */
+  autotracking: boolean;
 }
 
 /** Cameras from Frigate's config, in its UI order, with the go2rtc streams that belong to each. */
@@ -116,6 +121,8 @@ export function camerasFromConfig(config: FrigateConfig): FrigateCamera[] {
       objects: camera.objects?.track ?? ['person'],
       zones: Object.keys(camera.zones ?? {}),
       streams: real,
+      onvif: !!camera.onvif?.host,
+      autotracking: camera.onvif?.autotracking?.enabled === true,
       order: camera.ui?.order ?? 0,
     };
   });
@@ -211,6 +218,17 @@ export class FrigateClient {
     const answer = await this.fetch(`/api/${encodeURIComponent(camera)}/latest.jpg?${query}`, { timeoutMs: 6000 });
     if (answer.status !== 200 || answer.body[0] !== 0xff || answer.body[1] !== 0xd8) throw new Error(`latest.jpg answered HTTP ${answer.status}`);
     return answer.body;
+  }
+
+  /** PTZ features and presets of a camera that Frigate controls over ONVIF (empty when it has none). */
+  async ptzInfo(camera: string): Promise<{ features: string[]; presets: string[] }> {
+    const answer = await this.fetch(`/api/${encodeURIComponent(camera)}/ptz/info`, { timeoutMs: 10000 });
+    if (answer.status !== 200) return { features: [], presets: [] };
+    const data = JSON.parse(answer.body.toString('utf8') || '{}') as { features?: unknown; presets?: unknown };
+    return {
+      features: Array.isArray(data.features) ? data.features.map(String) : [],
+      presets: Array.isArray(data.presets) ? data.presets.map(String) : [],
+    };
   }
 
   /** go2rtc's view of the streams (codecs of the producers), through Frigate's API. */

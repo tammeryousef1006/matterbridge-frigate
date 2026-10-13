@@ -3,8 +3,18 @@
   "description": "Frigate NVR cameras in Matter: live video and audio, detections as motion, snapshots and cloud clip recording, with no ffmpeg needed. Every camera is its own Matter device: pair each one with its own QR code (plugin page, globe icon, or Matterbridge Devices).",
   "type": "object",
   "properties": {
-    "name": { "description": "Plugin name", "type": "string", "readOnly": true, "ui:widget": "hidden" },
-    "type": { "description": "Plugin type", "type": "string", "readOnly": true, "ui:widget": "hidden" },
+    "name": {
+      "description": "Plugin name",
+      "type": "string",
+      "readOnly": true,
+      "ui:widget": "hidden"
+    },
+    "type": {
+      "description": "Plugin type",
+      "type": "string",
+      "readOnly": true,
+      "ui:widget": "hidden"
+    },
     "frigateHost": {
       "title": "Frigate address",
       "description": "IP address or host name of Frigate, without http:// (empty: the plugin looks for it on the network at startup)",
@@ -52,10 +62,25 @@
       "description": "The broker Frigate publishes to. Empty: detections come from Frigate's own WebSocket",
       "type": "string"
     },
-    "mqttPort": { "title": "MQTT port", "type": "integer", "default": 1883 },
-    "mqttTls": { "title": "MQTT over TLS", "type": "boolean", "default": false },
-    "mqttUser": { "title": "MQTT user", "type": "string" },
-    "mqttPassword": { "title": "MQTT password", "type": "string", "ui:widget": "password" },
+    "mqttPort": {
+      "title": "MQTT port",
+      "type": "integer",
+      "default": 1883
+    },
+    "mqttTls": {
+      "title": "MQTT over TLS",
+      "type": "boolean",
+      "default": false
+    },
+    "mqttUser": {
+      "title": "MQTT user",
+      "type": "string"
+    },
+    "mqttPassword": {
+      "title": "MQTT password",
+      "type": "string",
+      "ui:widget": "password"
+    },
     "mqttTopicPrefix": {
       "title": "MQTT topic prefix",
       "description": "Frigate's mqtt: topic_prefix (default frigate)",
@@ -73,23 +98,57 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "properties": {
-          "name": { "title": "Frigate camera", "description": "The camera's name in Frigate", "type": "string" },
-          "enabled": { "title": "Add to Matter", "type": "boolean", "default": true },
-          "title": { "title": "Name in Matter", "description": "Empty: Frigate's name for the camera", "type": "string" },
-          "stream": { "title": "go2rtc stream", "description": "Empty: chosen automatically (best H.264 up to 1080p). After the first start a list of this camera's streams appears here", "type": "string" },
-          "rtspUrl": { "title": "RTSP URL instead of go2rtc (optional)", "description": "Only for a camera without a go2rtc restream: rtsp://user:password@camera-ip:554/path (H.264)", "type": "string" },
+          "name": {
+            "title": "Frigate camera",
+            "description": "The camera's name in Frigate",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Add to Matter",
+            "type": "boolean",
+            "default": true
+          },
+          "title": {
+            "title": "Name in Matter",
+            "description": "Empty: Frigate's name for the camera",
+            "type": "string"
+          },
+          "stream": {
+            "title": "go2rtc stream",
+            "description": "Empty: chosen automatically (best H.264 up to 1080p). After the first start a list of this camera's streams appears here",
+            "type": "string"
+          },
+          "rtspUrl": {
+            "title": "RTSP URL instead of go2rtc (optional)",
+            "description": "Only for a camera without a go2rtc restream: rtsp://user:password@camera-ip:554/path (H.264)",
+            "type": "string"
+          },
           "rotation": {
             "title": "Rotation",
             "description": "Turns the picture in live view, clips and snapshots",
             "type": "string",
             "default": "0",
             "oneOf": [
-              { "const": "0", "title": "As is" },
-              { "const": "90", "title": "90° clockwise" },
-              { "const": "180", "title": "180° (upside down)" },
-              { "const": "270", "title": "90° counter-clockwise" }
+              {
+                "const": "0",
+                "title": "As is"
+              },
+              {
+                "const": "90",
+                "title": "90\u00b0 clockwise"
+              },
+              {
+                "const": "180",
+                "title": "180\u00b0 (upside down)"
+              },
+              {
+                "const": "270",
+                "title": "90\u00b0 counter-clockwise"
+              }
             ]
           },
           "liveAudio": {
@@ -97,14 +156,32 @@
             "description": "Opus from go2rtc as is, or made from G.711. AAC-only streams need an Opus track in go2rtc (ffmpeg:<camera>#audio=opus)",
             "type": "string",
             "default": "opus",
-            "oneOf": [{ "const": "opus", "title": "On" }, { "const": "off", "title": "Off" }]
+            "oneOf": [
+              {
+                "const": "opus",
+                "title": "On"
+              },
+              {
+                "const": "off",
+                "title": "Off"
+              }
+            ]
           },
           "clipAudio": {
             "title": "Clip audio",
             "description": "AAC in recorded clips (the camera's AAC as is, or made from G.711 / Opus)",
             "type": "string",
             "default": "aac",
-            "oneOf": [{ "const": "aac", "title": "On" }, { "const": "off", "title": "Off" }]
+            "oneOf": [
+              {
+                "const": "aac",
+                "title": "On"
+              },
+              {
+                "const": "off",
+                "title": "Off"
+              }
+            ]
           },
           "detections": {
             "title": "Detections",
@@ -116,13 +193,17 @@
             "title": "Objects that count",
             "description": "Empty: every object Frigate tracks for this camera (person, car, dog, ...)",
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
           "zones": {
             "title": "Only in these Frigate zones",
             "description": "Empty: anywhere in the picture",
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
           "motion": {
             "title": "Frigate motion counts too",
@@ -142,11 +223,30 @@
             "type": "boolean",
             "default": false
           },
-          "info": { "title": "Note", "type": "string", "readOnly": true }
+          "ptz": {
+            "title": "Pan, tilt and zoom (experimental)",
+            "description": "For a PTZ camera Frigate controls over ONVIF (onvif: in the Frigate config): arrows, zoom and the camera's presets in the Matter app",
+            "type": "boolean",
+            "default": true
+          },
+          "info": {
+            "title": "Note",
+            "type": "string",
+            "readOnly": true
+          }
         }
       }
     },
-    "debug": { "title": "Debug", "type": "boolean", "default": false },
-    "unregisterOnShutdown": { "title": "Unregister on shutdown", "type": "boolean", "default": false, "ui:widget": "hidden" }
+    "debug": {
+      "title": "Debug",
+      "type": "boolean",
+      "default": false
+    },
+    "unregisterOnShutdown": {
+      "title": "Unregister on shutdown",
+      "type": "boolean",
+      "default": false,
+      "ui:widget": "hidden"
+    }
   }
 }
